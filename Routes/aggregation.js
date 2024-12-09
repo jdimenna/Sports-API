@@ -1,5 +1,5 @@
 import express from 'express';
-import { connectDB } from '../config/db.js';
+import { connectDB } from '../Config/db.js';
 const router = express.Router();
 
 router.get('/total-players', async (req, res) => {
@@ -18,12 +18,18 @@ router.get('/average-age', async (req, res) => {
     try {
         const db = await connectDB();
         const result = await db.collection('players').aggregate([
-            { $group: {_id: "$team", averageAge: { avg: "$age" } } }
+            { 
+                $group: { 
+                    _id: "$team", 
+                    averageAge: { $avg: "$age" } // Use $avg for calculating averages
+                } 
+            }
         ]).toArray();
         res.json(result);
     } catch (error) {
         res.status(500).json({ message: "Error calculating average age", error });
     }
+    
 });
 
 router.get('/players-with-team', async (req, res) => {
