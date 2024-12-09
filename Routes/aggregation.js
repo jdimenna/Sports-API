@@ -78,18 +78,76 @@ router.get('/total-matches', async (req, res) => {
 
 router.get('/wins-per-team', async (req, res) => {
     try {
-        const db = await connectDB();
-        const result = await db.collection('matches').aggregate([
-            { $match: { $expr: { $gt: ["$home_score", "$away_score"]}} },
-            { $group: { _id: "$home_team", wins: { $sum: 1}}} 
-        ]).toArray();
-        res.json(result);
+      const db = await connectDB();
+   
+      // Aggregate to count wins for each team (home and away)
+      const result = await db.collection('matches').aggregate([
+        {
+          $lookup: {
+            from: 'scores',          // Join with the 'scores' collection
+            localField: '_id',       // Match _id in the 'matches' collection
+            foreignField: 'match_id', // Match 'match_id' in the 'scores' collection
+            as: 'match_scores'       // Output the result in a field called 'match_scores'
+          }
+        },
+        { $unwind: '$match_scores' }, // Unwind the 'match_scores' array
+   
+        // Separate home wins and away wins
+        {
+          $facet: {
+            homeWins: [
+              {
+                $match: {
+                  $expr: {
+                    $gt: ['$match_scores.home_score', '$match_scores.away_score'] // Home team wins if home_score > away_score
+                  }
+                }
+              },
+              { $group: { _id: '$home_team', wins: { $sum: 1 } } } // Count wins for home team
+            ],
+            awayWins: [
+              {
+                $match: {
+                  $expr: {
+                    $gt: ['$match_scores.away_score', '$match_scores.home_score'] // Away team wins if away_score > home_score
+                  }
+                }
+              },
+              { $group: { _id: '$away_team', wins: { $sum: 1 } } } // Count wins for away team
+            ]
+          }
+        },
+   
+        // Combine home and away wins into one list
+        {
+          $project: {
+            totalWins: { $concatArrays: ['$homeWins', '$awayWins'] }
+          }
+        },
+   
+        // Unwind the 'totalWins' array to merge home and away wins
+        { $unwind: '$totalWins' },
+   
+        // Group by team and sum the wins for each team (from both home and away games)
+        {
+          $group: {
+            _id: '$totalWins._id',  // Team name
+            wins: { $sum: '$totalWins.wins' } // Total wins for each team
+          }
+        },
+   
+        // Optionally, sort by the number of wins in descending order
+        { $sort: { wins: -1 } }
+      ]).toArray();
+   
+      // Send the result back to the client
+      res.json(result);
     } catch (error) {
-        res.status(500).json({ message: "Error counting wins", error });
+      res.status(500).json({ message: 'Error counting wins', error });
     }
-});
+  });
 
-router.get('/total-score-by-team', async (req, res) => {
+router.get('/total-score-by-team', async (req, res) => { // not working
     try {
         const db = await connectDB();
         const result = await db.collection('matches').aggregate([
@@ -125,7 +183,7 @@ router.get('/players-more-than-10-matches', async (req, res) => {
     }
 });
 
-router.get('/most-scored-player', async (req, res) => {
+router.get('/most-scored-player', async (req, res) => { //not working
     try {
         const db = await connectDB();
         const result = await db.collection('matches').aggregate([
@@ -149,7 +207,7 @@ router.get('/most-scored-player', async (req, res) => {
     }
 });
 
-router.get('/teams-more-than-10-matches', async (req, res) => {
+router.get('/teams-more-than-10-matches', async (req, res) => { //not working
     try {
         const db = await connectDB();
         const result = await db.collection('matches').aggregate([
